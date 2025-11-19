@@ -1,0 +1,58 @@
+# .github/workflows/security-scanning.yml
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, uat ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 0' # Weekly scan
+
+jobs:
+  code-scan:
+    name: Code Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Bandit (Python security)
+      run: |
+        pip install bandit
+        bandit -r app/ -f json -o bandit-results.json || true
+
+    - name: Run Safety (dependency check)
+      run: |
+        pip install safety
+        safety check --json --output safety-report.json || true
+
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Detect secrets
+      uses: gitleaks/gitleaks-action@v2
+      with:
+        config-path: .gitleaks.toml
+
+  container-scan:
+    name: Container Security
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build container
+      run: docker build -t hello-app:scan .
+
+    - name: Run Trivy scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: hello-app:scan
+        format: 'table'
+        exit-code: 0
+        severity: 'CRITICAL,HIGH'
